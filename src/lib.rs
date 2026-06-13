@@ -11,10 +11,11 @@ pub mod transport;
 
 pub use bottle::{Bottle, BottleBuilder, Priority};
 pub use payload::{
-    AlertMessage, BottleCommand, BottlePayload, BottleState, ConsensusVote, DiscoveryReport,
+    AlertMessage, AlertSeverity, BottleCommand, BottlePayload, BottleState,
+    ConsensusVote, DiscoveryReport, VoteValue,
 };
-pub use protocol::{WireFormat, WireError};
-pub use transport::Transport;
+pub use protocol::{WireFormat, WireError, encode, decode};
+pub use transport::{Transport, MemoryTransport};
 
 /// Unique identifier for an agent in the fleet.
 pub type AgentId = String;

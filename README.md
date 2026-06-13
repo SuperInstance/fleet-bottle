@@ -1,76 +1,75 @@
 # 🍾 fleet-bottle
 
-Inter-agent messaging protocol for the SuperInstance fleet.
+Inter-agent messaging protocol for the **SuperInstance** fleet. Bottles are immutable messages that drift between agents (ships) until picked up.
 
-Bottles are immutable messages passed between agents — like messages in bottles between ships at sea.
+## Concept
 
-## Quick Start
+A **Bottle** is like a message in a bottle cast between ships in a fleet:
+
+- **Immutable** — once built, contents don't change
+- **Directed or broadcast** — send to a specific agent or the whole fleet
+- **TTL-based expiry** — old bottles dissolve and are discarded
+- **Priority levels** — Low, Normal, High, Emergency (ordered)
+- **Transport-agnostic** — HTTP, WebSocket, filesystem, stdio, anything
+
+## Usage
 
 ```rust
 use fleet_bottle::*;
+use chrono::Duration;
 
-// Create a directed message
+// Broadcast to the fleet
 let bottle = Bottle::builder("agent-alpha")
-    .to("agent-bravo")
-    .payload(BottlePayload::Text("status: nominal".into()))
+    .payload(BottlePayload::Text("All hands on deck".into()))
     .priority(Priority::High)
-    .ttl(chrono::Duration::seconds(30))
+    .ttl(Duration::seconds(300))
     .build();
 
-// Broadcast a discovery
-let broadcast = Bottle::builder("scout")
-    .payload(BottlePayload::Discovery(DiscoveryReport {
-        subject: "new-crate".into(),
-        details: vec!["found in registry".into()],
-        confidence: 0.95,
-    }))
+// Direct message with a command
+let dm = Bottle::builder("commander")
+    .to("worker-1")
+    .payload(BottlePayload::Command(
+        BottleCommand::new("deploy")
+            .arg("fleet-edge-worker")
+            .arg("--production")
+            .expect_ack(),
+    ))
+    .meta("trace_id", serde_json::json!("abc-123"))
     .build();
-```
 
-## Wire Format
-
-Two formats are supported:
-
-- **JSON** — human-readable, debuggable, CF Workers friendly
-- **Binary V1** — framed with magic bytes (`F1 B0 71 1E`), auto-detected on decode
-
-```rust
-use fleet_bottle::protocol::{encode, decode, WireFormat};
-
+// Wire encoding
 let bytes = encode(&bottle, WireFormat::Json)?;
-let restored = decode(&bytes)?;
-```
+let decoded = decode(&bytes)?; // auto-detects JSON vs binary
 
-## Transport
-
-The `Transport` trait is transport-agnostic. Implement it for HTTP, WebSocket, file system, or stdio.
-
-A `MemoryTransport` is included for testing:
-
-```rust
-use fleet_bottle::transport::MemoryTransport;
-
-let transport = MemoryTransport::new(WireFormat::Json);
+// In-memory transport (for testing)
+let transport = MemoryTransport::new(WireFormat::BinaryV1);
 transport.send(&bottle)?;
 let received = transport.receive()?;
 ```
-
-## Design Principles
-
-- **Immutable** — bottles cannot be modified after creation
-- **TTL-aware** — optional time-to-live with expiry checking
-- **Priority levels** — Low, Normal, High, Emergency
-- **Transport-agnostic** — HTTP, WebSocket, file system, stdio, or custom
-- **CF Workers compatible** — no filesystem deps in core
-- **Serializable** — JSON and compact binary formats
 
 ## Payload Types
 
 | Type | Purpose |
 |------|---------|
-| `Text` | Plain messages between agents |
-| `Command` | Remote procedure calls with ack support |
+| `Text` | Plain text messages |
+| `Command` | Instructions for the receiving agent |
 | `State` | Key-value state snapshots |
-| `Consensus` | Distributed voting |
-| `Discovery` | Capability/finding announcements |
-| `Alert` | Priority notifications requiring attention |
+| `Consensus` | Votes in distributed decisions |
+| `Discovery` | Agent/service discovery reports |
+| `Alert` | Warnings and critical alerts |
+
+## Wire Formats
+
+- **JSON** — human-readable, debuggable, CF Workers friendly
+- **BinaryV1** — framed binary with magic bytes (`0xF1B0711E`), version header, length-prefixed JSON payload
+- **Auto-detection** — `decode()` detects format from magic bytes
+
+## Compatibility
+
+- No filesystem dependencies in core
+- Works in Cloudflare Workers (WASM-compatible)
+- All serialization via `serde_json` — no proc-macro binary deps
+
+## License
+
+MIT
